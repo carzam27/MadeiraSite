@@ -2,16 +2,27 @@
 
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { SessionProvider } from 'next-auth/react'
-import { PropsWithChildren } from 'react'
-
-const queryClient = new QueryClient()
+import { useState, type PropsWithChildren, useEffect } from 'react'
 
 export function Providers({ children }: PropsWithChildren) {
+  // Crear una nueva instancia del queryClient para cada sesión
+  const [queryClient] = useState(() => new QueryClient())
+  // Estado para controlar el renderizado en el cliente
+  const [mounted, setMounted] = useState(false)
+
+  // Efecto para manejar el montaje
+  useEffect(() => {
+    setMounted(true)
+  }, [])
+
+  // No renderizar nada hasta que estemos en el cliente
+  if (!mounted) return null
+
   return (
-    <QueryClientProvider client={queryClient}>
-      <SessionProvider>
+    <SessionProvider>
+      <QueryClientProvider client={queryClient}>
         {children}
-      </SessionProvider>
-    </QueryClientProvider>
+      </QueryClientProvider>
+    </SessionProvider>
   )
 }

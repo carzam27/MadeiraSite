@@ -91,6 +91,12 @@ export type Database = {
       }
       proveedores_servicios: {
         Row: {
+          categorias_servicios: any
+          name: ReactNode
+          business: ReactNode
+          rating: ReactNode
+          reviews: ReactNode
+          category: ReactNode
           id: string
           id_categoria: string
           nombre_negocio: string
