@@ -1,32 +1,21 @@
 // src/lib/auth/device.ts
-import { cookies } from 'next/headers'
-import { type RequestCookie } from 'next/dist/compiled/@edge-runtime/cookies'
+'use client'
 
-const DEVICE_ID_COOKIE = 'device_id'
+import { v4 as uuidv4 } from 'uuid' // Necesitarás instalar: npm install uuid @types/uuid
 
-export async function getDeviceId(): Promise<string> {
-  const cookieStore = await cookies()
-  const deviceIdCookie: RequestCookie | undefined = cookieStore.get(DEVICE_ID_COOKIE)
+const DEVICE_ID_KEY = 'device_id'
 
-  if (!deviceIdCookie?.value) {
-    const newDeviceId = crypto.randomUUID()
-    
-    cookieStore.set({
-      name: DEVICE_ID_COOKIE,
-      value: newDeviceId,
-      httpOnly: true,
-      secure: process.env.NODE_ENV === 'production',
-      sameSite: 'lax',
-      maxAge: 365 * 24 * 60 * 60 // 1 año
-    })
-    
-    return newDeviceId
+export function getDeviceId(): string {
+  let deviceId = localStorage.getItem(DEVICE_ID_KEY)
+  
+  if (!deviceId) {
+    deviceId = uuidv4()
+    localStorage.setItem(DEVICE_ID_KEY, deviceId)
   }
-
-  return deviceIdCookie.value
+  
+  return deviceId
 }
 
-export async function clearDeviceId(): Promise<void> {
-  const cookieStore = await cookies()
-  cookieStore.delete(DEVICE_ID_COOKIE)
+export function clearDeviceId(): void {
+  localStorage.removeItem(DEVICE_ID_KEY)
 }

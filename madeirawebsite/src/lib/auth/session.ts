@@ -1,5 +1,6 @@
 // src/lib/auth/session.ts
 import { getServerSession } from 'next-auth'
+import { useSession as useNextAuthSession } from 'next-auth/react'
 import type { GetServerSidePropsContext } from 'next'
 import { authOptions } from './config'
 
@@ -49,10 +50,10 @@ export async function hasRole(
 
 /**
  * Hook para usar en componentes del cliente
+ * Ahora usa directamente el hook de next-auth
  */
 export function useSession() {
-  // Re-export del hook de next-auth
-  return { session: null, loading: false }
+  return useNextAuthSession()
 }
 
 /**
@@ -75,4 +76,5 @@ export interface SessionUser {
   image?: string | null
   role: string
   permissions: UserPermissions
+  status?: string
 }

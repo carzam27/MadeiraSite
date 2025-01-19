@@ -1,6 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { supabase } from './client'
-import type { Database } from './types'
+import type { Database }  from '@/types/supabase';
 
 type Tables = Database['public']['Tables']
 

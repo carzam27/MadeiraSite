@@ -8,6 +8,7 @@ declare module 'next-auth' {
       id: string
       role: string
       permissions: string[]
+      status: string  // Agregamos status
     } & DefaultSession['user']
   }
 
@@ -15,6 +16,7 @@ declare module 'next-auth' {
     id: string
     role: string
     permissions: string[]
+    status: string  // Agregamos status
   }
 }
 
@@ -23,6 +25,7 @@ declare module 'next-auth/jwt' {
     id: string
     role: string
     permissions: string[]
+    status: string  // Agregamos status
     refreshToken?: string // Agregamos el refreshToken al tipo JWT
   }
 }

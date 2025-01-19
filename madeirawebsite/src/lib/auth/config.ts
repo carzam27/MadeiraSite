@@ -2,10 +2,8 @@
 import { NextAuthOptions } from 'next-auth'
 import CredentialsProvider from 'next-auth/providers/credentials'
 import { AuthService } from './service'
-import { getDeviceId } from './device'
 import type { User } from 'next-auth'
-import type { JWT } from 'next-auth/jwt'
-import type { AuthUser } from './types'
+import { cookies } from 'next/headers'
 
 export const authOptions: NextAuthOptions = {
   providers: [
@@ -18,105 +16,80 @@ export const authOptions: NextAuthOptions = {
       },
       async authorize(credentials, req): Promise<User | null> {
         if (!credentials?.email || !credentials?.password) {
-          console.log('❌ Faltan credenciales')
           throw new Error('Email y contraseña son requeridos')
         }
 
         try {
-          console.log('🔍 Intentando validar credenciales para:', credentials.email)
-          
-          // Validar credenciales
-          const userData: AuthUser = await AuthService.validateCredentials(
+          const userData = await AuthService.validateCredentials(
             credentials.email,
-            credentials.password
+            credentials.password,
+            req?.headers?.['user-agent'],
+            req?.headers?.['x-forwarded-for']?.toString()
           )
 
-          console.log('✅ Credenciales validadas correctamente', {
-            userId: userData.id,
-            role: userData.role
-          })
+          if (userData.status !== 'activo') {
+            throw new Error(`Tu cuenta está ${userData.status}`)
+          }
 
-          // Crear el objeto User base
-          const user: User = {
+          return {
             id: userData.id,
             email: userData.email,
             name: userData.name,
             role: userData.role,
             permissions: userData.permissions,
+            status: userData.status,
             image: null
           }
-
-          // Si el usuario quiere ser recordado, crear refresh token
-          if (credentials.remember === 'true') {
-            console.log('📝 Creando refresh token para usuario:', user.id)
-            const deviceId = await getDeviceId()
-            const refreshToken = await AuthService.createRefreshToken(userData.id, deviceId)
-            // Guardamos el token en un campo temporal que solo usaremos en el callback jwt
-            ;(user as any)._refreshToken = refreshToken.token
-            console.log('✅ Refresh token creado correctamente')
-          }
-
-          return user
         } catch (error) {
-          console.error('❌ Error en authorize:', error)
-          throw new Error(error instanceof Error ? error.message : 'Error de autenticación')
+          console.error('Error en authorize:', error)
+          throw error
         }
-      }
+      },
     })
   ],
+  pages: {
+    signIn: '/auth/login',
+    error: '/auth/error',
+  },
   callbacks: {
-    async jwt({ token, user }): Promise<JWT> {
-      // Inicial sign in
+    async jwt({ token, user, account,trigger }) {
+      console.log("JWT Callback:", { tokenExists: !!token, userExists: !!user, trigger })
+      
       if (user) {
-        console.log('🔑 Generando JWT inicial para usuario:', user.id)
+        token.id = user.id
+        token.role = user.role
+        token.permissions = user.permissions
+      }
+
+      // Para manejar el signOut, verificamos si el token está vacío
+      if (!token || Object.keys(token).length === 0) {
+        console.log("JWT: Token vacío o inexistente")
         return {
           ...token,
-          id: user.id,
-          role: user.role,
-          permissions: user.permissions,
-          // Recuperamos el token temporal
-          refreshToken: (user as any)._refreshToken
+          id: '',
+          role: '',
+          permissions: [],
+          status: ''
         }
       }
-
-      // En subsiguientes llamadas, verificar refresh token
-      if (token.refreshToken) {
-        console.log('🔄 Verificando refresh token')
-        const refreshToken = await AuthService.validateRefreshToken(token.refreshToken)
-
-        // Si el refresh token es válido, renovar el token
-        if (refreshToken) {
-          console.log('✅ Refresh token válido, renovando JWT')
-          return {
-            ...token,
-            refreshToken: refreshToken.token
-          }
-        }
-        console.log('❌ Refresh token inválido o expirado')
-      }
-
       return token
     },
     async session({ session, token }) {
-      if (token) {
-        console.log('👤 Actualizando sesión con datos del token')
-        session.user.id = token.id
-        session.user.role = token.role
-        session.user.permissions = token.permissions
+      console.log("Session Callback:", { sessionExists: !!session, tokenExists: !!token })
+      
+      if (token && session.user) {
+        session.user.id = token.id as string
+        session.user.role = token.role as string
+        session.user.permissions = token.permissions as string[]
       }
       return session
-    }
-  },
-  pages: {
-    signIn: '/auth/signin',
-    error: '/auth/error',
+    },
   },
   session: {
     strategy: 'jwt',
-    maxAge: 24 * 60 * 60, // 24 hours
+    maxAge: 30 * 24 * 60 * 60, // 30 días
   },
-  jwt: {
-    maxAge: 24 * 60 * 60, // 24 hours
-  },
-  debug: true // Habilita logs detallados de NextAuth
+  
+  secret: process.env.NEXTAUTH_SECRET,
+  debug: process.env.NODE_ENV === 'development'
 }

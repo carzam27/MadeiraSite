@@ -1,3 +1,5 @@
+import { ReactNode } from "react"
+
 // src/types/supabase.ts
 export type Json =
   | string
@@ -204,7 +206,7 @@ export type UsuarioInsert = TableInsert<'usuarios'>
 export type UsuarioUpdate = TableUpdate<'usuarios'>
 
 export type Proveedor = TableRow<'proveedores_servicios'>
-export type ProveedorInsert = TableInsert<'proveedores_servicios'>
+//export type ProveedorInsert = TableInsert<'proveedores_servicios'>
 export type ProveedorUpdate = TableUpdate<'proveedores_servicios'>
 
 export type Categoria = TableRow<'categorias_servicios'>
@@ -260,4 +262,39 @@ export type ProveedorConRelaciones = Proveedor & {
 export type ResenaConUsuario = ProveedorResena & {
   usuarios: Usuario
   proveedores_servicios: Proveedor
+}
+
+
+export type RegistroFormData = {
+  email: string
+  password: string
+  nombre_completo: string
+  telefono: string
+  dni: string
+  etapa: number
+  manzana: string
+  unidad: string
+  tipo_residente: 'propietario' | 'inquilino'
+  terminos: boolean
+}
+
+// Tipo para enviar a la API (sin terminos)
+export type RegistroUsuario = Omit<RegistroFormData, 'terminos'>
+
+export type ProveedorInsert = {
+  id_categoria: string
+  nombre_negocio: string
+  nombre_contacto: string | null
+  telefono: string
+  whatsapp: string | null
+  email: string | null
+  direccion: string | null
+  sitio_web: string | null
+  descripcion: string | null
+  estado: 'activo' | 'pendiente' | 'rechazado'
+  creado_por: string | null
+  actualizado_por: string | null
+  eliminado: boolean
+  // No incluimos los campos calculados/automáticos
+  // categorias_servicios, promedio_calificacion, total_resenas
 }

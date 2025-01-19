@@ -1,13 +1,16 @@
 // src/app/auth/login/page.tsx
 'use client'
 
-import React, { useState } from 'react'
+import React, { useEffect, useState } from 'react'
 import { User, Lock, Eye, EyeOff } from 'lucide-react'
-import { useRouter } from 'next/navigation'
+import { redirect, useRouter } from 'next/navigation'
 import { signIn } from 'next-auth/react'
 import { z } from 'zod'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
+import { getServerSession } from 'next-auth'
+import { authOptions } from '@/lib/auth/config'
+import { useSession } from 'next-auth/react'
 
 const loginSchema = z.object({
   email: z.string().email('Email inválido'),
@@ -17,7 +20,8 @@ const loginSchema = z.object({
 
 type LoginFormData = z.infer<typeof loginSchema>
 
-export default function Page() {  // Cambiado de LoginPage a Page
+export default   function Page() {  // Cambiado de LoginPage a Page
+  const { status } = useSession()
   const router = useRouter()
   const [showPassword, setShowPassword] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -31,6 +35,13 @@ export default function Page() {  // Cambiado de LoginPage a Page
     resolver: zodResolver(loginSchema)
   })
 
+  // 2. Efecto para manejar redirección
+  useEffect(() => {
+    if (status === 'authenticated') {
+      router.push('/dashboard')
+    }
+  }, [status, router])
+
   const onSubmit = async (data: LoginFormData) => {
     try {
       setError(null)
@@ -41,7 +52,7 @@ export default function Page() {  // Cambiado de LoginPage a Page
         email: data.email,
         password: data.password,
         remember: data.remember,
-        redirect: false,
+        redirect: true,
         callbackUrl: '/dashboard'
       })
   
@@ -51,10 +62,12 @@ export default function Page() {  // Cambiado de LoginPage a Page
         setError(result.error)
         return
       }
-  
+  /*
       if (result?.ok) {
-        router.push('/dashboard')
+        await new Promise(resolve => setTimeout(resolve, 500))
+      window.location.href = '/dashboard'  // Usar navegación directa en lugar de router
       }
+      */
     } catch (error) {
       console.error('Error en login:', error)
       setError(error instanceof Error ? error.message : 'Error inesperado')
@@ -63,16 +76,15 @@ export default function Page() {  // Cambiado de LoginPage a Page
     }
   }
 
+// 4. Renderizado condicional
+if (status === 'loading') {
+  return <div>Cargando...</div>
+}
+
+
   return (
     <div className="min-h-screen bg-gray-50 flex flex-col">
-      {/* Status Bar */}
-      <div className="bg-blue-600 text-white h-6 text-xs flex items-center justify-between px-4">
-        <span>9:41</span>
-        <div className="flex space-x-2">
-          <span>5G</span>
-          <span>100%</span>
-        </div>
-      </div>
+
 
       {/* Main Content */}
       <div className="flex-1 flex flex-col p-6">
@@ -187,4 +199,5 @@ export default function Page() {  // Cambiado de LoginPage a Page
       <div className="h-6 bg-gray-50" />
     </div>
   )
+
 }

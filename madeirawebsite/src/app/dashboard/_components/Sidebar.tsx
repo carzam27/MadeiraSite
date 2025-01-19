@@ -3,11 +3,13 @@
 
 import { User } from 'next-auth'
 import { useRouter } from 'next/navigation'
-import { signOut } from 'next-auth/react'
+import { getSession, signOut } from 'next-auth/react'
 import { 
   Home, Settings, LogOut, Users, FileText, 
   List, X, Building2, Star, MessageCircle 
 } from 'lucide-react'
+import { supabase } from '@/lib/supabase/client'
+import { AuthService } from '@/lib/auth/service'
 
 interface SidebarProps {
   isOpen: boolean
@@ -17,6 +19,39 @@ interface SidebarProps {
 
 export function Sidebar({ isOpen, onClose, user }: SidebarProps) {
   const router = useRouter()
+
+  const handleSignOut = async () => {
+    try {
+      // 1. Primero invalidar la sesión de Supabase
+      await supabase.auth.signOut()
+      
+      // 2. Limpiar tokens de refresh
+      const session = await getSession()
+      if (session?.user?.id) {
+        await AuthService.revokeAllUserTokens(session.user.id)
+      }
+  
+      // 3. Forzar expiración del token JWT
+      const res = await fetch('/auth/logout', {
+        method: 'POST'
+      })
+  
+      if (!res.ok) {
+        throw new Error('Error al cerrar sesión')
+      }
+  
+      // 4. Finalmente hacer signOut de NextAuth
+      await signOut({
+        redirect: true,
+        callbackUrl: '/auth/login'
+      })
+  
+    } catch (error) {
+      console.error('Error en logout:', error)
+      // En caso de error, forzar redirección
+      window.location.href = '/auth/login'
+    }
+  }
 
   const menuItems = [
     {
@@ -118,7 +153,7 @@ export function Sidebar({ isOpen, onClose, user }: SidebarProps) {
 
           {/* Logout Button */}
           <button
-            onClick={() => signOut()}
+            onClick={handleSignOut}
             className="flex items-center space-x-3 w-full p-2 rounded-lg hover:bg-red-50 text-red-600"
           >
             <LogOut className="h-5 w-5" />
@@ -128,4 +163,8 @@ export function Sidebar({ isOpen, onClose, user }: SidebarProps) {
       </aside>
     </>
   )
+}
+
+function revokeAllUserTokens(id: string) {
+  throw new Error('Function not implemented.')
 }

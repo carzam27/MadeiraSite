@@ -1,108 +1,148 @@
+// src/lib/auth/service.ts
 import { supabase } from '../supabase/client'
-import { cookies } from 'next/headers'
-import type { Usuario } from '@/types/supabase'
-import type { AuthUser, RefreshToken } from './types'
-import bcrypt from 'bcryptjs'
+import type { AuthLog, RefreshToken, UserDevice } from './types'
+import { UAParser } from 'ua-parser-js'
 
 export class AuthService {
-  static async validateCredentials(email: string, password: string): Promise<AuthUser> {
-    // Buscar usuario
-    const { data: user, error } = await supabase
-      .from('usuarios')
-      .select(`
-        *,
-        roles (
-          nombre,
-          roles_permisos (
-            permisos (
-              codigo
+  static async validateCredentials(email: string, password: string, userAgent?: string, ipAddress?: string) {
+    try {
+      // 1. Autenticar con Supabase Auth
+      const { data: authData, error: authError } = await supabase.auth.signInWithPassword({
+        email,
+        password
+      })
+
+      if (authError) {
+        throw new Error('Credenciales inválidas')
+      }
+
+      // 2. Obtener datos del usuario
+      const { data: userData, error: userError } = await supabase
+        .from('usuarios')
+        .select(`
+          *,
+          roles (
+            id,
+            nombre,
+            roles_permisos (
+              permisos (
+                nombre
+              )
             )
           )
-        )
-      `)
-      .eq('email', email.toLowerCase())
-      .eq('eliminado', false)
-      .single()
+        `)
+        .eq('id', authData.user.id)
+        .single()
 
-    if (error || !user) {
-      console.error('❌ Error o usuario no encontrado:', error)
-      throw new Error('Credenciales inválidas')
-    }
+      if (userError) {
+        console.error('Error de usuario:', userError)
+        throw new Error('Error al obtener datos del usuario')
+      }
 
-    console.log('✅ Usuario encontrado:', { id: user.id, estado: user.estado })
-    // Verificar estado
-    if (user.estado !== 'activo') {
-      throw new Error('Usuario no activo')
-    }
+      // 3. Verificaciones de estado
+      if (userData.eliminado) {
+        throw new Error('Esta cuenta no está disponible')
+      }
 
-    // Verificar contraseña
-    console.log('🔐 Verificando contraseña')
-    const isValid = await bcrypt.compare(password, user.password_hash)
+      if (userData.estado === 'pendiente') {
+        throw new Error('Tu cuenta está pendiente de aprobación')
+      }
 
-    if (!isValid) {
-      console.log('❌ Contraseña inválida')
-      throw new Error('Credenciales inválidas')
-    }
-    console.log('✅ Contraseña verificada correctamente')
+      if (userData.estado === 'inactivo') {
+        throw new Error('Tu cuenta está inactiva')
+      }
 
-    // Extraer permisos
-    const permisos = user.roles?.roles_permisos
-      ?.map((rp: { permisos: { codigo: any } }) => rp.permisos?.codigo)
-      .filter(Boolean) as string[]
+      // 4. Formatear permisos
+      const permissions = userData.roles.roles_permisos?.map(
+        (rp: any) => rp.permisos.nombre
+      ) || []
 
-    return {
-      id: user.id,
-      email: user.email,
-      name: user.nombre_completo,
-      role: user.roles?.nombre,
-      permissions: permisos
+      // 5. Crear refresh token si el usuario está activo
+      if (userData.estado === 'activo') {
+        const deviceId = crypto.randomUUID()
+        try {
+          await this.createRefreshToken(userData.id, deviceId, {
+            deviceName: this.getDeviceName(userAgent),
+            userAgent,
+            ipAddress
+          })
+        } catch (tokenError) {
+          console.error('Error refresh token:', tokenError)
+        }
+      }
+
+      // 6. Registrar evento de login
+      await this.logAuthEvent(userData.id, 'login', ipAddress, userAgent)
+
+      return {
+        id: userData.id,
+        email: userData.email,
+        name: userData.nombre_completo,
+        role: userData.roles.nombre,
+        permissions,
+        status: userData.estado
+      }
+    } catch (error) {
+      console.error('Error en validateCredentials:', error)
+      throw error
     }
   }
 
-  // Actualizar la función createRefreshToken en src/lib/auth/service.ts
-static async createRefreshToken(userId: string, deviceId: string): Promise<RefreshToken> {
-  console.log('📝 Creando refresh token para usuario:', userId)
-  
-  try {
-      // Primero, eliminar tokens existentes para este dispositivo
-      const { error: deleteError } = await supabase
-          .from('refresh_tokens')
-          .delete()
-          .match({ user_id: userId, device_id: deviceId })
+  private static getDeviceName(userAgent?: string): string {
+    if (!userAgent) return 'Dispositivo Desconocido'
+    
+    try {
+      // Implementar lógica simple de detección de dispositivo
+      if (userAgent.includes('Mobile')) return 'Dispositivo Móvil'
+      if (userAgent.includes('Tablet')) return 'Tablet'
+      if (userAgent.includes('Windows')) return 'PC Windows'
+      if (userAgent.includes('Mac')) return 'PC Mac'
+      if (userAgent.includes('Linux')) return 'PC Linux'
+      return 'Navegador Web'
+    } catch {
+      return 'Dispositivo Desconocido'
+    }
+  }
 
-      if (deleteError) {
-          console.error('Error eliminando tokens antiguos:', deleteError)
-          // Continuamos a pesar del error
-      }
-
+  static async createRefreshToken(
+    userId: string,
+    deviceId: string,
+    details: {
+      deviceName?: string
+      userAgent?: string
+      ipAddress?: string
+    }
+  ) {
+    try {
+      // Generar token único
       const token = crypto.randomUUID()
       const expiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000) // 30 días
 
       const { data, error } = await supabase
-          .from('refresh_tokens')
-          .insert({
-              token,
-              user_id: userId,
-              device_id: deviceId,
-              expires_at: expiresAt.toISOString()
-          })
-          .select()
-          .single()
+        .from('refresh_tokens')
+        .insert({
+          user_id: userId,
+          token,
+          device_id: deviceId,
+          device_name: details.deviceName || 'Dispositivo Desconocido',
+          ip_address: details.ipAddress,
+          user_agent: details.userAgent,
+          expires_at: expiresAt.toISOString(),
+        })
+        .select()
+        .single()
 
       if (error) {
-          console.error('Error insertando refresh token:', error)
-          throw new Error(`Error creando refresh token: ${error.message}`)
+        console.error('Error inserting refresh token:', error)
+        throw new Error('Error al crear refresh token')
       }
 
-      console.log('✅ Refresh token creado correctamente')
       return data
-  } catch (error) {
-      console.error('❌ Error en createRefreshToken:', error)
-      throw error instanceof Error 
-          ? error 
-          : new Error('Error inesperado creando refresh token')
+    } catch (error) {
+      console.error('createRefreshToken error:', error)
+      throw error
+    }
   }
-}
 
   static async validateRefreshToken(token: string): Promise<RefreshToken | null> {
     const { data: refreshToken, error } = await supabase
@@ -117,12 +157,15 @@ static async createRefreshToken(userId: string, deviceId: string): Promise<Refre
 
     // Verificar expiración
     if (new Date(refreshToken.expires_at) < new Date()) {
-      await supabase
-        .from('refresh_tokens')
-        .delete()
-        .eq('token', token)
+      await this.revokeRefreshToken(token)
       return null
     }
+
+    // Actualizar último uso
+    await supabase
+      .from('refresh_tokens')
+      .update({ last_used: new Date().toISOString() })
+      .eq('token', token)
 
     return refreshToken
   }
@@ -132,5 +175,93 @@ static async createRefreshToken(userId: string, deviceId: string): Promise<Refre
       .from('refresh_tokens')
       .delete()
       .eq('token', token)
+  }
+
+  static async revokeAllUserTokens(userId: string): Promise<void> {
+    await supabase
+      .from('refresh_tokens')
+      .delete()
+      .eq('user_id', userId)
+  }
+
+  static async getUserDevices(userId: string): Promise<UserDevice[]> {
+    const { data, error } = await supabase
+      .from('refresh_tokens')
+      .select('device_id, device_name, last_used, ip_address, user_agent')
+      .eq('user_id', userId)
+      .order('last_used', { ascending: false })
+
+    if (error) {
+      throw new Error('Error obteniendo dispositivos')
+    }
+
+    return data.map(token => ({
+      id: token.device_id,
+      device_name: token.device_name || 'Dispositivo desconocido',
+      last_active: token.last_used,
+      ip_address: token.ip_address,
+      user_agent: token.user_agent
+    }))
+  }
+
+  static async revokeDevice(userId: string, deviceId: string): Promise<void> {
+    await supabase
+      .from('refresh_tokens')
+      .delete()
+      .eq('user_id', userId)
+      .eq('device_id', deviceId)
+  }
+
+  static async logAuthEvent(
+    userId: string,
+    event: AuthLog['event'],
+    ipAddress?: string,
+    userAgent?: string
+  ): Promise<void> {
+    await supabase
+      .from('auth_logs')
+      .insert({
+        user_id: userId,
+        event,
+        ip_address: ipAddress,
+        user_agent: userAgent,
+      })
+  }
+
+  static async logout(userId: string, deviceId?: string): Promise<void> {
+    try {
+      console.log('Iniciando logout para usuario:', userId)
+  
+      // 1. Revocar tokens de refresh
+      await this.revokeAllUserTokens(userId)
+      console.log('Tokens revocados')
+  
+      // 2. Cerrar sesión en Supabase
+      const { error } = await supabase.auth.signOut()
+      if (error) {
+        console.error('Error en Supabase signOut:', error)
+      }
+      console.log('Sesión de Supabase cerrada')
+  
+      // 3. Limpiar storage local
+      if (typeof window !== 'undefined') {
+        const keysToRemove = [
+          'supabase.auth.token',
+          'next-auth.session-token',
+          'next-auth.callback-url',
+          'next-auth.csrf-token'
+        ]
+        
+        keysToRemove.forEach(key => {
+          localStorage.removeItem(key)
+          sessionStorage.removeItem(key)
+        })
+      }
+      
+      // Removido el return { success: true }
+    } catch (error) {
+      console.error('Error durante logout:', error)
+      throw error
+    }
   }
 }

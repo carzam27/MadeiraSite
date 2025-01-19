@@ -3,61 +3,88 @@ import { NextResponse } from 'next/server'
 import type { NextRequest } from 'next/server'
 import { withAuth } from 'next-auth/middleware'
 
-// Lista de rutas públicas que no requieren autenticación
+// Lista de rutas públicas
 const publicPaths = [
+  '/auth',
   '/test-connection',
   '/test',
-  '/api/public/test-connection'
+  '/api/public',
+  '/_next',
+  '/favicon.ico',
+  '/assets'
 ]
 
-// Función para verificar si una ruta es pública
 const isPublicPath = (path: string) => {
   return publicPaths.some(publicPath => path.startsWith(publicPath))
 }
 
-export function middleware(request: NextRequest) {
-  // Obtener la ruta actual
-  const path = request.nextUrl.pathname
+export default withAuth(
+  function middleware(req: NextRequest) {
+    const path = req.nextUrl.pathname
+    console.log('Middleware checking path:', path)
 
-  // Si es una ruta pública, permitir acceso
+  // Modificar la lógica de redirección
   if (isPublicPath(path)) {
     return NextResponse.next()
   }
 
-  // Para rutas protegidas, verificar la sesión
-  // Aquí podrías agregar la lógica de verificación de sesión si es necesario
-  
-  // Por ahora, permitimos todas las rutas que no son públicas
-  return NextResponse.next()
-}
+    return NextResponse.next()
+  },
+  {
+    callbacks: {
+      authorized({ req, token }) {
+        const path = req.nextUrl.pathname
+        console.log('Auth check for path:', path, 'Token:', token ? 'exists' : 'null')
+ /*
+        // Si estamos en login y hay token, redirigir a dashboard
+        if (path === '/auth/login' && token) {
+          return false
+        }
 
-export default withAuth({
-  callbacks: {
-    authorized({ req, token }) {
-      const path = req.nextUrl.pathname
-      
-      // Rutas públicas
-      if (path.startsWith('/auth') || path === '/') {
+        // Si hay token, permitir acceso a rutas protegidas
+        if (token && (path.startsWith('/dashboard') || path === '/')) {
+          return true
+        }
+
+        // Si no hay token, requerir login
+        if (!token && !isPublicPath(path)) {
+          return false
+        }
+
+        // Rutas admin requieren rol específico
+        if (path.startsWith('/admin')) {
+          return token?.role === 'admin'
+        }
+
+        // Por defecto requerir autenticación
+        return !!token
+        */
+        // Lógica más clara para rutas protegidas
+        if (!token && !isPublicPath(path)) {
+          return false
+        }
+
+        if (path === '/auth/login' && token) {
+          return false  // Redirigir a dashboard si hay token
+        }
+
         return true
       }
-
-      // Rutas admin
-      if (path.startsWith('/admin')) {
-        return token?.role === 'admin'
-      }
-
-      // Resto de rutas requieren autenticación
-      return !!token
+    },
+    pages: {
+      signIn: '/auth/login',
+      error: '/auth/error'
     }
   }
-})
+)
 
 export const config = {
   matcher: [
-    // Rutas que quieres que pasen por el middleware
     '/dashboard/:path*',
     '/admin/:path*',
     '/api/:path*',
-    '/((?!_next/static|favicon.ico).*)',
+    '/',
+    '/auth/login',
+    '/((?!_next/static|_next/image|favicon.ico|assets/).*)'
   ]
 }

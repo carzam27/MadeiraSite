@@ -6,6 +6,11 @@ import { authOptions } from '@/lib/auth/config'
 
 export default async function DashboardLayout({ children }: PropsWithChildren) {
   const session = await getServerSession(authOptions)
+  //console.log("Session user:" + session?.user);
+  console.log("Layout Server Session:", {
+    exists: !!session,
+    token: session?.user // veremos qué información tiene
+  })
   
   if (!session) {
     redirect('/auth/login')

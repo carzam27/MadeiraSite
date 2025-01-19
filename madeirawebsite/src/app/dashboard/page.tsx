@@ -8,19 +8,42 @@ import { useProveedores } from '@/lib/hooks/queries/useProveedores'
 import { useCategorias } from '@/lib/hooks/queries/useCategorias'
 import { useToggleFavorito } from '@/lib/hooks/queries/useFavoritos'
 import type { Proveedor } from '@/types/supabase'
+import { useRouter } from 'next/navigation'
 
 export default function DashboardPage() {
   const [showFilters, setShowFilters] = useState(false)
   const [selectedCategory, setSelectedCategory] = useState<string>('todos')
   const [searchTerm, setSearchTerm] = useState('')
-  
 
-  const { data: session } = useSession()
+
+  //const { data: session } = useSession()
   const { data: providers = [], isLoading: loadingProviders } = useProveedores()
   const { data: categories = [], isLoading: loadingCategories } = useCategorias()
   const { mutate: toggleFavorite } = useToggleFavorito()
-// Agregar al inicio del componente junto a los otros estados
-const [showAllCategories, setShowAllCategories] = useState(false)
+  const { status, data: session } = useSession({
+    required: true,
+    onUnauthenticated() {
+      window.location.href = '/auth/login'
+    }
+  })
+
+
+  const [showAllCategories, setShowAllCategories] = useState(false)
+  const router = useRouter()
+
+  if (status === 'loading') {
+    return <div>Cargando...</div>
+  }
+
+  if (!session) {
+    return null
+  }
+
+  if (session) {
+    console.log("Session: "+session?.user?.email);
+  }
+
+
   // Filtrar proveedores
   const filteredProviders = providers.filter(provider => {
     const matchesCategory = selectedCategory === 'todos' || 
@@ -37,6 +60,10 @@ const [showAllCategories, setShowAllCategories] = useState(false)
         userId: session.user.id 
       })
     }
+  }
+
+  const handleCreateProveedor = () => {
+    router.push('/dashboard/providers/nuevo')
   }
 
   return (
@@ -62,6 +89,13 @@ const [showAllCategories, setShowAllCategories] = useState(false)
           </button>
         </div>
       </div>
+
+      <button 
+        className="fixed bottom-6 right-4 bg-blue-600 text-white p-4 rounded-full shadow-lg hover:bg-blue-700 z-50"
+        onClick={handleCreateProveedor}
+      >
+        <Plus className="h-6 w-6" />
+      </button>
 
       {/* Categories */}
 {!loadingCategories && (
