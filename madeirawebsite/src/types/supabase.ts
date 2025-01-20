@@ -207,7 +207,7 @@ export type UsuarioUpdate = TableUpdate<'usuarios'>
 
 export type Proveedor = TableRow<'proveedores_servicios'>
 //export type ProveedorInsert = TableInsert<'proveedores_servicios'>
-export type ProveedorUpdate = TableUpdate<'proveedores_servicios'>
+//export type ProveedorUpdate = TableUpdate<'proveedores_servicios'>
 
 export type Categoria = TableRow<'categorias_servicios'>
 export type CategoriaInsert = TableInsert<'categorias_servicios'>
@@ -287,6 +287,25 @@ export type ProveedorInsert = {
   nombre_contacto: string | null
   telefono: string
   whatsapp: string | null
+  email: string | null
+  direccion: string | null
+  sitio_web: string | null
+  descripcion: string | null
+  estado: 'activo' | 'pendiente' | 'rechazado'
+  creado_por: string | null
+  actualizado_por: string | null
+  eliminado: boolean
+  // No incluimos los campos calculados/automáticos
+  // categorias_servicios, promedio_calificacion, total_resenas
+}
+
+export type ProveedorUpdate = {
+  id: string
+  id_categoria: string
+  nombre_negocio: string
+  nombre_contacto: string | null
+  telefono: string | null
+  whatsapp: string 
   email: string | null
   direccion: string | null
   sitio_web: string | null

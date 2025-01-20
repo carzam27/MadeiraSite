@@ -48,3 +48,75 @@ export function useCreateProveedor() {
     }
   })
 }
+
+export function useProveedor(id: string) {
+  return useQuery({
+    queryKey: ['proveedor', id],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('proveedores_servicios')
+        .select(`
+          *,
+          categorias_servicios (
+            id,
+            nombre
+          )
+        `)
+        .eq('id', id)
+        .single()
+
+      if (error) throw error
+      return data as ProveedorUpdate
+    },
+    enabled: !!id
+  })
+}
+
+export function useUpdateProveedor() {
+  const queryClient = useQueryClient()
+  
+  return useMutation({
+    mutationFn: async ({ 
+      id, 
+      updatedProveedor 
+    }: { 
+      id: string, 
+      updatedProveedor: ProveedorUpdate 
+    }) => {
+      const { data, error } = await supabase
+        .from('proveedores_servicios')
+        .update(updatedProveedor)
+        .eq('id', id)
+        .select()
+        .single()
+
+      if (error) throw error
+      return data as Proveedor
+    },
+    onSuccess: (_, { id }) => {
+      queryClient.invalidateQueries({ queryKey: ['proveedores'] })
+      queryClient.invalidateQueries({ queryKey: ['proveedor', id] })
+    }
+  })
+}
+
+export function useDeleteProveedor() {
+  const queryClient = useQueryClient()
+  
+  return useMutation({
+    mutationFn: async (id: string) => {
+      const { data, error } = await supabase
+        .from('proveedores_servicios')
+        .update({ eliminado: true })
+        .eq('id', id)
+        .select()
+        .single()
+
+      if (error) throw error
+      return data as Proveedor
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['proveedores'] })
+    }
+  })
+}
